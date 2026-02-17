@@ -1,4 +1,5 @@
-aiogram==3.10.0
+aiogram
 motor==3.3.2
-g4f>=0.3.2.3
+pymongo==4.6.3
+g4f
 flask
