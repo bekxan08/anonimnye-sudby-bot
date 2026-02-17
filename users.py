@@ -26,6 +26,7 @@ def main_kb():
 
 @user_router.message(Command("start"))
 async def start(message: types.Message, state: FSMContext):
+    await state.clear() # Сбрасываем старые состояния, если они были
     u = await get_user_data(message.from_user.id)
     if u:
         return await message.answer(f"✨ С возвращением, {u['name']}!", reply_markup=main_kb())
@@ -50,10 +51,10 @@ async def reg_age(message: types.Message, state: FSMContext):
 
 @user_router.message(RegStates.gender)
 async def reg_gender(message: types.Message, state: FSMContext):
-    # Исправленная логика выбора пола (учитываем кнопки)
-    if "М" in message.text.upper():
+    txt = message.text.upper()
+    if "М" in txt:
         g = "male"
-    elif "Ж" in message.text.upper():
+    elif "Ж" in txt:
         g = "female"
     else:
         return await message.answer("Пожалуйста, нажми на кнопку М или Ж")
@@ -61,7 +62,6 @@ async def reg_gender(message: types.Message, state: FSMContext):
     data = await state.get_data()
     uid = message.from_user.id
     
-    # Создаем документ для MongoDB с датой регистрации
     user_doc = {
         "user_id": uid,
         "name": data['name'],
@@ -72,7 +72,7 @@ async def reg_gender(message: types.Message, state: FSMContext):
         "exp": 0,
         "level": "Новичок",
         "last_bonus": "2000-01-01 00:00:00",
-        "reg_date": datetime.now().strftime('%d.%m.%Y') # Сохраняем дату
+        "reg_date": datetime.now().strftime('%d.%m.%Y')
     }
     
     await users_col.insert_one(user_doc)
@@ -83,26 +83,32 @@ async def reg_gender(message: types.Message, state: FSMContext):
         await bot.send_message(ADMIN_ID, f"🆕 Новый юзер: {data['name']}, {data['age']} лет, {g}")
     except: pass
 
-# --- ПРОФИЛЬ ---
+# --- ПРОФИЛЬ (ИСПРАВЛЕННЫЙ) ---
 
 @user_router.message(F.text == "👤 Профиль")
 async def profile(message: types.Message):
     u = await get_user_data(message.from_user.id)
-    if not u: return
+    if not u: 
+        return await message.answer("Сначала пройди регистрацию через /start")
     
     is_admin = (message.from_user.id == ADMIN_ID)
     ai_lim = "∞" if is_admin else u.get('limits_ai', 0)
     search_lim = "∞" if is_admin else u.get('limits_search', 0)
-    reg_date = u.get('reg_date', 'Давно') # Получаем дату из базы
+    reg_date = u.get('reg_date', 'Неизвестно')
     
-    progress = "🔹" * (u.get('exp', 0) // 20)
+    # Исправленный расчет шкалы прогресса (защита от ошибок на твоем скриншоте)
+    current_exp = u.get('exp', 0)
+    # Ограничиваем количество синих квадратов до 10 максимум
+    filled = min(int(current_exp // 40), 10) 
+    empty = 10 - filled
+    progress_bar = "🔵" * filled + "⚪️" * empty
     
     text = (
         f"👤 **Профиль: {u['name']}**\n"
         f"🗓 В игре с: `{reg_date}`\n"
         f"🎖 Уровень: `{u.get('level', 'Новичок')}` {'(Админ)' if is_admin else ''}\n"
-        f"✨ Опыт: `{u.get('exp', 0)}`/400\n"
-        f"{progress}\n\n"
+        f"✨ Опыт: `{current_exp}`/400\n"
+        f"{progress_bar}\n\n"
         f"🔮 Гадания: **{ai_lim}**\n"
         f"🤝 Поиски: **{search_lim}**"
     )
@@ -123,7 +129,7 @@ async def fortune(message: types.Message):
     try:
         response = await g4f.ChatCompletion.create_async(
             model=g4f.models.default,
-            messages=[{"role": "user", "content": f"Дай короткое предсказание для {u['name']}, {u['age']} лет."}]
+            messages=[{"role": "user", "content": f"Дай очень короткое предсказание для {u['name']}, {u['age']} лет."}]
         )
         ans = response
     except:
