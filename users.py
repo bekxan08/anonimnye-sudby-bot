@@ -50,11 +50,18 @@ async def reg_age(message: types.Message, state: FSMContext):
 
 @user_router.message(RegStates.gender)
 async def reg_gender(message: types.Message, state: FSMContext):
-    g = "male" if "М" in message.text.upper() else "female"
+    # Исправленная логика выбора пола (учитываем кнопки)
+    if "М" in message.text.upper():
+        g = "male"
+    elif "Ж" in message.text.upper():
+        g = "female"
+    else:
+        return await message.answer("Пожалуйста, нажми на кнопку М или Ж")
+
     data = await state.get_data()
     uid = message.from_user.id
     
-    # Создаем документ для MongoDB
+    # Создаем документ для MongoDB с датой регистрации
     user_doc = {
         "user_id": uid,
         "name": data['name'],
@@ -64,16 +71,14 @@ async def reg_gender(message: types.Message, state: FSMContext):
         "limits_search": 3,
         "exp": 0,
         "level": "Новичок",
-        "last_bonus": "2000-01-01 00:00:00"
+        "last_bonus": "2000-01-01 00:00:00",
+        "reg_date": datetime.now().strftime('%d.%m.%Y') # Сохраняем дату
     }
     
-    # Сохраняем в облако
     await users_col.insert_one(user_doc)
-    
     await state.clear()
     await message.answer("Регистрация завершена! Твоя судьба открыта.", reply_markup=main_kb())
 
-    # Уведомление админу
     try:
         await bot.send_message(ADMIN_ID, f"🆕 Новый юзер: {data['name']}, {data['age']} лет, {g}")
     except: pass
@@ -88,11 +93,13 @@ async def profile(message: types.Message):
     is_admin = (message.from_user.id == ADMIN_ID)
     ai_lim = "∞" if is_admin else u.get('limits_ai', 0)
     search_lim = "∞" if is_admin else u.get('limits_search', 0)
+    reg_date = u.get('reg_date', 'Давно') # Получаем дату из базы
     
     progress = "🔹" * (u.get('exp', 0) // 20)
     
     text = (
         f"👤 **Профиль: {u['name']}**\n"
+        f"🗓 В игре с: `{reg_date}`\n"
         f"🎖 Уровень: `{u.get('level', 'Новичок')}` {'(Админ)' if is_admin else ''}\n"
         f"✨ Опыт: `{u.get('exp', 0)}`/400\n"
         f"{progress}\n\n"
@@ -122,9 +129,8 @@ async def fortune(message: types.Message):
     except:
         ans = "Звезды молчат, но твое сердце знает ответ."
 
-    await add_exp(uid, 10) # Добавляем опыт через нашу функцию
+    await add_exp(uid, 10)
     
-    # Списываем лимит в MongoDB
     if uid != ADMIN_ID:
         await users_col.update_one({"user_id": uid}, {"$inc": {"limits_ai": -1}})
         
