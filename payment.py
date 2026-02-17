@@ -1,9 +1,6 @@
 from aiogram import Router, F, types
-from config import bot
-
 pay_router = Router()
 
 @pay_router.message(F.text == "💎 Магазин")
 async def shop(message: types.Message):
-    # Офферы: 50 звезд - 100 рублей и т.д.
-    pass
+    await message.answer("🛒 **Магазин Звезд**\n\n1. 10 гаданий — 99₽\n2. Безлимитный поиск — 199₽\n\n*(Оплата временно недоступна)*")
