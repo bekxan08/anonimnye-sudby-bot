@@ -1,10 +1,27 @@
-import os
-from aiogram import Bot, Dispatcher
-from aiogram.fsm.storage.memory import MemoryStorage
+import asyncio
+from config import bot, dp
+from database import init_db
+from users import user_router
+from admin import admin_router
+from payment import pay_router
+from flask import Flask
+from threading import Thread
 
-BOT_TOKEN = os.environ.get('8301617429:AAGGSpBGwCKQpgavoNUMiqkVdV1HCqeGzwo')
-ADMIN_ID = 7587800410  # ВСТАВЬ СВОЙ ID
-DB_PATH = "bot_data.db"
+# Подключаем все модули (роутеры)
+dp.include_router(user_router)
+dp.include_router(admin_router)
+dp.include_router(pay_router)
 
-bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher(storage=MemoryStorage())
+# Flask для Uptime
+app = Flask('')
+@app.route('/')
+def home(): return "Бот работает"
+def run(): app.run(host='0.0.0.0', port=8080)
+
+async def main():
+    await init_db()
+    Thread(target=run).start() # Keep alive
+    await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())
