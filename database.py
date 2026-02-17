@@ -9,7 +9,7 @@ async def init_db():
             bonus_given INTEGER DEFAULT 0, level TEXT DEFAULT 'Путник')""")
         await db.commit()
 
-async def get_user(user_id):
+async def get_user_data(user_id):
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)) as c:
