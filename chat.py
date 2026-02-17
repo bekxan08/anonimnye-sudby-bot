@@ -97,6 +97,16 @@ async def handle_anonymous_chat(message: types.Message, state: FSMContext):
                 await bot.send_message(partner_id, f"💬 {message.text}")
             elif message.sticker:
                 await bot.send_sticker(partner_id, message.sticker.file_id)
+
+# ... (внутри handle_anonymous_chat после пересылки сообщения) ...
+    if partner_id:
+        try:
+            if message.text:
+                await bot.send_message(partner_id, f"💬 {message.text}")
+                # НАЧИСЛЯЕМ ОПЫТ ЗА ОБЩЕНИЕ
+                from database import add_exp
+                await add_exp(uid, 2) 
+# ...
             # И так далее для фото/голосовых
         except Exception:
             await message.answer("⚠️ Не удалось отправить сообщение.")
