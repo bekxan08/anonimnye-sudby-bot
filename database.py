@@ -1,36 +1,44 @@
-import os
-from motor.motor_asyncio import AsyncIOMotorClient
+from aiogram import Router, F, types
+from aiogram.types import LabeledPrice, PreCheckoutQuery
+from config import bot
+from database import users_col
 
-MONGO_URL = os.environ.get('MONGO_URL')
-client = AsyncIOMotorClient(MONGO_URL)
-db = client.oracle_bot
-users_col = db.users
+shop_router = Router()
 
-async def init_db():
-    try:
-        await client.admin.command('ping')
-        print("✅ Подключено к MongoDB Atlas")
-    except Exception as e:
-        print(f"❌ Ошибка подключения к базе: {e}")
+# Цены в Telegram Stars
+PRICES = {
+    "ai_10": {"stars": 50, "label": "🔮 10 Гаданий"},
+    "ai_50": {"stars": 200, "label": "🔮 50 Гаданий (Скидка!)"},
+    "search_20": {"stars": 70, "label": "🤝 20 Поисков"},
+    "exp_100": {"stars": 100, "label": "✨ +100 Опыта"},
+    "vip": {"stars": 500, "label": "💎 VIP Статус (Full)"}
+}
 
-async def get_user_data(user_id):
-    return await users_col.find_one({"user_id": user_id})
+@shop_router.message(F.text == "💎 Магазин")
+async def show_shop(message: types.Message):
+    kb = types.InlineKeyboardMarkup(inline_keyboard=[
+        [types.InlineKeyboardButton(text="🔮 10 Гаданий (50 ⭐️)", callback_data="buy_ai_10")],
+        [types.InlineKeyboardButton(text="🔮 50 Гаданий (200 ⭐️)", callback_data="buy_ai_50")],
+        [types.InlineKeyboardButton(text="🤝 20 Поисков (70 ⭐️)", callback_data="buy_search_20")],
+        [types.InlineKeyboardButton(text="✨ +100 Опыта (100 ⭐️)", callback_data="buy_exp_100")],
+        [types.InlineKeyboardButton(text="👑 VIP Доступ (500 ⭐️)", callback_data="buy_vip")],
+        [types.InlineKeyboardButton(text="🏠 Назад", callback_data="to_main")]
+    ])
+    
+    await message.answer("🛍 **Магическая Лавка**\nВыбери товар для усиления:", reply_markup=kb)
 
-async def add_exp(user_id, amount):
-    # Принудительно приводим к int, чтобы не сломать математику профиля
-    await users_col.update_one(
-        {"user_id": user_id},
-        {"$inc": {"exp": int(amount)}}
+@shop_router.callback_query(F.data.startswith("buy_"))
+async def create_invoice(call: types.CallbackQuery):
+    item_id = call.data.replace("buy_", "")
+    item = PRICES.get(item_id)
+    
+    await bot.send_invoice(
+        call.from_user.id,
+        title=item["label"],
+        description="Пополнение магических сил",
+        payload=f"pay_{item_id}",
+        currency="XTR",
+        prices=[LabeledPrice(label="Оплата", amount=item["stars"])],
+        provider_token=""
     )
-    
-    user = await users_col.find_one({"user_id": user_id})
-    if not user: return
-    
-    e = user.get('exp', 0)
-    if e < 50: level = 'Новичок'
-    elif e < 150: level = 'Путник'
-    elif e < 400: level = 'Мастер'
-    else: level = 'Магистр'
-    
-    if user.get('level') != level:
-        await users_col.update_one({"user_id": user_id}, {"$set": {"level": level}})
+    await call.answer()
