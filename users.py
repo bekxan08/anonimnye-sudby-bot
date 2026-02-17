@@ -1,9 +1,8 @@
 from aiogram import Router, F, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from datetime import datetime
 from config import ADMIN_ID
-from database import get_user_data, users_col
+from database import get_user_data
 
 user_router = Router()
 
@@ -19,61 +18,46 @@ def main_kb():
 # --- ОБРАБОТЧИКИ ---
 
 @user_router.message(Command("start"))
-async def start_cmd(message: types.Message, state: FSMContext):
-    await state.clear() # Это "лечит" зависшие кнопки
-    u = await get_user_data(message.from_user.id)
-    if u:
-        await message.answer(f"✨ С возвращением, {u.get('name')}!", reply_markup=main_kb())
-    else:
-        # Тут должна быть твоя логика регистрации
-        await message.answer("Добро пожаловать! Напиши /reg для регистрации.")
-
 @user_router.message(F.text == "🏠 Главное меню")
-async def back_home(message: types.Message, state: FSMContext):
-    await state.clear()
-    await message.answer("🏠 Вы вернулись в меню", reply_markup=main_kb())
+async def cmd_start(message: types.Message, state: FSMContext):
+    await state.clear() # Сброс всех состояний, чтобы кнопки заработали
+    u = await get_user_data(message.from_user.id)
+    if not u:
+        return await message.answer("Привет! Пройди регистрацию командой /reg")
+    
+    await message.answer(f"✨ Оракул приветствует тебя, {u.get('name')}!", reply_markup=main_kb())
 
 @user_router.message(F.text == "👤 Профиль")
 async def profile(message: types.Message):
     try:
         u = await get_user_data(message.from_user.id)
-        if not u:
-            return await message.answer("Зарегистрируйтесь: /start")
-
+        if not u: return
+        
         is_admin = (message.from_user.id == ADMIN_ID)
-        
-        # Данные из базы
-        name = u.get('name', 'Странник')
         exp = int(u.get('exp', 0))
-        level = u.get('level', 'Новичок')
         
-        # Шкала прогресса (безопасная)
+        # Визуальная шкала (10 делений)
         filled = min(exp // 40, 10)
         progress_bar = "🔵" * filled + "⚪️" * (10 - filled)
         
-        # Лимиты
-        ai_lim = "∞" if is_admin else u.get('limits_ai', 0)
-        search_lim = "∞" if is_admin else u.get('limits_search', 0)
-
         text = (
-            f"👤 **Профиль: {name}**\n"
-            f"🎖 Уровень: `{level}`\n"
+            f"👤 **Профиль: {u.get('name')}**\n"
+            f"🎖 Уровень: `{u.get('level', 'Новичок')}`\n"
             f"✨ Опыт: `{exp}`/400\n"
             f"{progress_bar}\n\n"
-            f"🔮 Гадания: **{ai_lim}**\n"
-            f"🤝 Поиски: **{search_lim}**"
+            f"🔮 Гадания: **{'∞' if is_admin else u.get('limits_ai', 0)}**\n"
+            f"🤝 Поиски: **{'∞' if is_admin else u.get('limits_search', 0)}**"
         )
-        await message.answer(text, parse_mode="Markdown", reply_markup=main_kb())
-        
+        # Добавляем Inline-кнопку назад прямо под профиль
+        kb = types.InlineKeyboardMarkup(inline_keyboard=[
+            [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="to_main")]
+        ])
+        await message.answer(text, parse_mode="Markdown", reply_markup=kb)
     except Exception as e:
-        print(f"🔴 Ошибка профиля: {e}")
-        await message.answer("❌ Ошибка загрузки профиля. Попробуйте /start")
+        print(f"Ошибка в профиле: {e}")
 
-@user_router.message(F.text == "💎 Магазин")
-async def shop_menu(message: types.Message):
-    # Пример вызова магазина из другого файла или здесь же
-    kb = types.InlineKeyboardMarkup(inline_keyboard=[
-        [types.InlineKeyboardButton(text="🔮 Купить гадания", callback_data="buy_ai")],
-        [types.InlineKeyboardButton(text="💎 Купить VIP", callback_data="buy_vip")]
-    ])
-    await message.answer("🏪 **Магическая лавка**\nВыберите товар:", reply_markup=kb)
+@user_router.callback_query(F.data == "to_main")
+async def back_to_main(call: types.CallbackQuery, state: FSMContext):
+    await state.clear()
+    await call.message.delete()
+    await call.message.answer("🏠 Главное меню", reply_markup=main_kb())
