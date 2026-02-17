@@ -39,8 +39,14 @@ async def profile(message: types.Message):
 
 @user_router.message(F.text == "🔮 Гадание")
 async def fortune(message: types.Message):
-    u = await get_user_data(message.from_user.id)
-    if u['limits_ai'] <= 0: 
+    from database import get_user_data, add_exp
+    from config import ADMIN_ID
+    
+    uid = message.from_user.id
+    u = await get_user_data(uid)
+    
+    # ПРОВЕРКА: Если не админ и лимиты кончились
+    if uid != ADMIN_ID and u['limits_ai'] <= 0: 
         return await message.answer("Твоя магическая энергия на нуле. Приходи завтра!")
     
     m = await message.answer("🔮 Оракул входит в транс...")
@@ -53,6 +59,16 @@ async def fortune(message: types.Message):
         ans = response
     except:
         ans = "Звезды скрыты туманом, но чувствую — день будет важным."
+
+    await add_exp(uid, 10)
+    
+    # СПИСЫВАЕМ ЛИМИТ ТОЛЬКО У ОБЫЧНЫХ ПОЛЬЗОВАТЕЛЕЙ
+    if uid != ADMIN_ID:
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute("UPDATE users SET limits_ai = limits_ai - 1 WHERE user_id = ?", (uid,))
+            await db.commit()
+        
+    await m.edit_text(f"📜 **Предсказание:**\n\n{ans}\n\n*+10 EXP*", parse_mode="Markdown")
 
     # Начисляем 10 опыта за гадание
     await add_exp(message.from_user.id, 10)
