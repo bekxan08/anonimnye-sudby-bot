@@ -16,9 +16,32 @@ active_chats = {} # Словарь вида {user_id: partner_id}
 
 @chat_router.message(F.text == "🤝 Найти пару")
 async def find_pair(message: types.Message, state: FSMContext):
+    from config import ADMIN_ID
     uid = message.from_user.id
     from database import get_user_data
     u = await get_user_data(uid)
+
+    # АДМИНУ МОЖНО ВСЕГДА
+    if uid != ADMIN_ID and u['limits_search'] <= 0:
+        if u['bonus_given'] == 0:
+            async with aiosqlite.connect(DB_PATH) as db:
+                await db.execute("UPDATE users SET limits_search = 1, bonus_given = 1 WHERE user_id = ?", (uid,))
+                await db.commit()
+            await message.answer("✨ Энергия на нуле, но Оракул дарит тебе +1 поиск!")
+        else:
+            return await message.answer("Лимиты исчерпаны.")
+
+    # ... (далее идет логика поиска без изменений) ...
+
+    # В КОНЦЕ, где списывается лимит:
+    if match:
+        # ... (логика соединения пары) ...
+        
+        # СПИСЫВАЕМ ЛИМИТ ТОЛЬКО У ОБЫЧНЫХ ПОЛЬЗОВАТЕЛЕЙ
+        if uid != ADMIN_ID:
+            async with aiosqlite.connect(DB_PATH) as db:
+                await db.execute("UPDATE users SET limits_search = limits_search - 1 WHERE user_id = ?", (uid,))
+                await db.commit()
 
     if u['limits_search'] <= 0:
         if u['bonus_given'] == 0:
