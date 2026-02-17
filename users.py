@@ -21,19 +21,26 @@ def main_kb():
 
 @user_router.message(F.text == "👤 Профиль")
 async def profile(message: types.Message):
+    from config import ADMIN_ID
     u = await get_user_data(message.from_user.id)
     if not u: return
     
-    # Прогресс-бар опыта (визуально)
+    is_admin = (message.from_user.id == ADMIN_ID)
+    
+    # Настраиваем отображение лимитов
+    ai_lim = "∞" if is_admin else u['limits_ai']
+    search_lim = "∞" if is_admin else u['limits_search']
+    rank_suffix = " (Администратор)" if is_admin else ""
+
     progress = "🔹" * (u['exp'] // 20)
     
     text = (
         f"👤 **Профиль: {u['name']}**\n"
-        f"🎖 Уровень: `{u['level']}`\n"
+        f"🎖 Уровень: `{u['level']}{rank_suffix}`\n"
         f"✨ Опыт: `{u['exp']}`\n"
         f"{progress}\n\n"
-        f"🔮 Гаданий доступно: {u['limits_ai']}\n"
-        f"🤝 Поисков доступно: {u['limits_search']}"
+        f"🔮 Гадания: **{ai_lim}**\n"
+        f"🤝 Поиски: **{search_lim}**"
     )
     await message.answer(text, parse_mode="Markdown")
 
